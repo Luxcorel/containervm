@@ -1,2 +1,6 @@
 *.iso
 *.qcow2
+*.vdi
+*.vmdk
+*.raw
+*.img
