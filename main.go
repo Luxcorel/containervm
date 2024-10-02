@@ -8,64 +8,122 @@ import (
 )
 
 const (
-	CreateImage int = iota
+	Exit int = iota
+	CreateStorage
 	BootFromISO
 	BootFromHarddrive
 	VdiToQcow2
-	Exit
 )
 
 func main() {
-	//TODO: Make these customizable
-	createImage := "qemu-img"
-	createImageOptions := []string{"create", "-f", "qcow2", "ubuntu_vm.qcow2", "20G"}
-
-	createVm := "qemu-system-x86_64"
-	createVmOptions := []string{"-m", "4G", "-hda", "ubuntu_vm.qcow2", "-cdrom", "test.iso", "-boot", "d", "-net", "nic", "-net", "user"}
-
-	startVm := "qemu-system-x86_64"
-	startVmOptions := []string{"-m", "4G", "-hda", "ubuntu_vm.qcow2", "-net", "nic", "-net", "user"}
-
-	vdiToQcow2 := "qemu-img"
-	vdiToQcow2Options := []string{"convert", "-f", "vdi", "-O", "qcow2", "ubuntu_vm.vdi", "ubuntu_vm.qcow2"}
-
 	for {
-		fmt.Println("What do you want to do?")
-		fmt.Println("0: Create image")
-		fmt.Println("1: Boot from ISO")
-		fmt.Println("2: Boot from harddrive")
-		fmt.Println("3: Convert VDI to QCOW2")
-		fmt.Println("4: Exit")
+		fmt.Println()
+		fmt.Println("###########################################")
+		fmt.Println("0: Exit")
+		fmt.Println("1: Create storage")
+		fmt.Println("2: Boot from ISO")
+		fmt.Println("3: Boot from harddrive")
+		fmt.Println("4: Convert VDI to QCOW2")
+		fmt.Println("###########################################")
+
+		fmt.Print("Enter your choice: ")
+
 		var input int
 		_, err := fmt.Scanln(&input)
+		fmt.Println()
 		if err != nil {
-			log.Fatalf("could not read input: %v", input)
+			log.Printf("could not read input: %v\n", err)
+			continue
 		}
 
-		// TODO: Move exit to case 0
 		switch input {
-		case CreateImage: // Create image
-			err := Execute(createImage, createImageOptions, nil)
-			if err != nil {
-				log.Fatalf("error: %v", err.Error())
-			}
-		case BootFromISO: // Boot from ISO
-			err := Execute(createVm, createVmOptions, nil)
-			if err != nil {
-				log.Fatalf("error: %v", err.Error())
-			}
-		case BootFromHarddrive: // Boot from harddrive
-			err := Execute(startVm, startVmOptions, nil)
-			if err != nil {
-				log.Fatalf("error: %v", err.Error())
-			}
-		case VdiToQcow2: // Convert VDI to QCOW2
-			err := Execute(vdiToQcow2, vdiToQcow2Options, nil)
-			if err != nil {
-				log.Fatalf("error: %v", err.Error())
-			}
+
 		case Exit: // Exit
 			os.Exit(0)
+
+		case CreateStorage: // Create image
+			imageSize, err := userInput("Enter image size(eg. 20G): ")
+			if err != nil {
+				log.Printf("could not read input: %v\n", err)
+				break
+			}
+
+			storageName, err := userInput("Enter image name(eg. storage): ")
+			storageName += ".qcow2"
+			if err != nil {
+				log.Printf("could not read input: %v\n", err)
+				break
+			}
+
+			err = createStorage(imageSize, storageName)
+			if err != nil {
+				log.Printf("could not create storage: %v\n", err)
+			}
+
+		case BootFromISO: // Boot from ISO
+			isoName, err := userInput("Enter ISO name(eg. ubuntu.iso): ")
+			if err != nil {
+				log.Printf("could not read input: %v\n", err)
+				break
+			}
+
+			storageName, err := userInput("Enter storage name(eg. storage): ")
+			storageName += ".qcow2"
+			if err != nil {
+				log.Printf("could not read input: %v\n", err)
+				break
+			}
+
+			memorySize, err := userInput("Enter memory size(eg. 4G): ")
+			if err != nil {
+				log.Printf("could not read input: %v\n", err)
+				break
+			}
+
+			err = bootFromISO(isoName, storageName, memorySize)
+			if err != nil {
+				log.Printf("could not boot from ISO: %v\n", err)
+			}
+
+		case BootFromHarddrive: // Boot from harddrive
+			memorySize, err := userInput("Enter memory size(eg. 4G): ")
+			if err != nil {
+				log.Printf("could not read input: %v\n", err)
+				break
+			}
+
+			storageName, err := userInput("Enter storage name(eg. storage): ")
+			storageName += ".qcow2"
+			if err != nil {
+				log.Printf("could not read input: %v\n", err)
+				break
+			}
+
+			err = bootFromHarddrive(memorySize, storageName)
+			if err != nil {
+				log.Printf("could not boot from harddrive: %v\n", err)
+			}
+
+		case VdiToQcow2: // Convert VDI to QCOW2
+			vdiName, err := userInput("Enter VDI name(eg. input): ")
+			vdiName += ".vdi"
+			if err != nil {
+				log.Printf("could not read input: %v\n", err)
+				break
+			}
+
+			qcow2Name, err := userInput("Enter output name(eg. output): ")
+			qcow2Name += ".qcow2"
+			if err != nil {
+				log.Printf("could not read input: %v\n", err)
+				break
+			}
+
+			err = vdiToQcow2(vdiName, qcow2Name)
+			if err != nil {
+				log.Printf("could not convert vdi to qcow2 %v\n", err)
+			}
+
 		default:
 			fmt.Println("Invalid option")
 		}
@@ -84,4 +142,43 @@ func Execute(cmd string, options []string, environment []string) error {
 		return err
 	}
 	return nil
+}
+
+func userInput(userText string) (string, error) {
+	fmt.Println(userText)
+	var input string
+	_, err := fmt.Scanln(&input)
+	if err != nil {
+		return "", err
+	}
+	return input, nil
+}
+
+func createStorage(imageSize, storageName string) error {
+	cmd := "qemu-img"
+	options := []string{"create", "-f", "qcow2", storageName, imageSize}
+
+	err := Execute(cmd, options, nil)
+	return err
+}
+
+func bootFromISO(isoName, storageName, memorySize string) error {
+	cmd := "qemu-system-x86_64"
+	options := []string{"-m", memorySize, "-hda", storageName, "-cdrom", isoName, "-boot", "d", "-net", "nic", "-net", "user"}
+	err := Execute(cmd, options, nil)
+	return err
+}
+
+func bootFromHarddrive(memorySize, storageName string) error {
+	cmd := "qemu-system-x86_64"
+	options := []string{"-m", memorySize, "-hda", storageName, "-net", "nic", "-net", "user"}
+	err := Execute(cmd, options, nil)
+	return err
+}
+
+func vdiToQcow2(vdiName, qcow2Name string) error {
+	cmd := "qemu-img"
+	options := []string{"convert", "-f", "vdi", "-O", "qcow2", vdiName, qcow2Name}
+	err := Execute(cmd, options, nil)
+	return err
 }
